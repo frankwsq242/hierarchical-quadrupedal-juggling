@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.log
+logs/
+outputs/
+.claude/
+.codex/
+.vscode/
+*.mp4
+!videos/mujoco_mirror_paper_latest.mp4
