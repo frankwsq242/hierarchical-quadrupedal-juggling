@@ -78,7 +78,7 @@ The actuator network is intentionally not vendored; it comes from the MIT-licens
 
 Developed as the Agile Quadrupeds Group 164 capstone in the [UC Berkeley Master of Engineering](https://funginstitute.berkeley.edu/programs-centers/full-time-program/) program, Mechanical Engineering, with the Hybrid Robotics Lab and advisor Prof. Koushil Sreenath and Post Doc advisor Sangli Teng.
 
-This is joint work by [Daniel Grant](https://github.com/DJRGVC), Jaime de Carlos de Churruca, and [Siqi (Frank) Wang](https://www.linkedin.com/in/siqi-frank-wang-6a5208259/). Daniel led the original Isaac Lab environment and task definitions. Frank led the hierarchical pi1-pi2 controller, pi2 training/export, Isaac Lab-to-MuJoCo transfer and validation, perception prototype, and deployment investigation. Jaime contributed to the project’s system design and mirror-law-planner work. The original repository is [QuadruJuggle](https://github.com/DJRGVC/QuadruJuggle).
+This is joint work by [Daniel Grant](https://github.com/DJRGVC), Jaime de Carlos de Churruca, and [Siqi (Frank) Wang](https://www.linkedin.com/in/siqi-frank-wang-6a5208259/).The original repository is [QuadruJuggle](https://github.com/DJRGVC/QuadruJuggle).
 
 For the complete project record, see the [capstone report](<docs/capstone_report.pdf>), [presentation deck](<docs/presentation_deck.pdf>), and [sim-to-sim debugging record](docs/sim_to_sim_debug_log.md). The earlier [February 2026 status report](QuadruJuggle_Research_Overview.pdf) is retained for timeline context but is partly superseded by later work.
 
