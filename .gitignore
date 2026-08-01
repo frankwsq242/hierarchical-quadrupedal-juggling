@@ -9,3 +9,5 @@ outputs/
 .vscode/
 *.mp4
 !videos/mujoco_mirror_paper_latest.mp4
+docs/figures/*.mp4
+docs/figures/*.webm
