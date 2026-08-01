@@ -1,131 +1,79 @@
 # Hierarchical Quadrupedal Juggling
 
-A Unitree Go1 bounces a 40 mm ping-pong ball on a 170 mm paddle mounted to its back,
-under velocity, yaw, and apex-height commands. Trained in Isaac Lab, transferred to
-MuJoCo.
+A UC Berkeley MEng Mechanical Engineering capstone on making a Unitree Go1 bounce a ping-pong ball on a back-mounted paddle by combining a reusable RL torso tracker with an interpretable planner.
 
-![Go1 juggling in MuJoCo](docs/figures/mujoco_demo.gif)
+<p align="center">
+  <img src="docs/figures/mujoco_demo.gif" width="640" alt="Go1 walking forward while bouncing a ball in MuJoCo">
+</p>
 
-*Mirror-law planner driving a trained torso-tracking policy during a six-second MuJoCo forward-walk-and-juggle segment.*
+<p align="center"><em>Analytic mirror-law planner plus the trained pi2 torso tracker in MuJoCo, six-second forward-walk-and-juggle segment.</em></p>
 
----
+## The idea
 
-## Approach
+Juggling is a compact test of legged manipulation: the robot must manage contact timing, ball energy, body pose, and motion at once. Rather than learn the full behavior as one opaque policy, this project separates the problem into a high-level planner and a learned low-level tracker. That makes the task easier to inspect, tune, and move between simulators.
 
-The controller is split into two layers with a 6-DOF torso command as the interface.
+<p align="center">
+  <img src="docs/figures/architecture.png" width="760" alt="Hierarchical pi1 planner to pi2 torso tracker architecture">
+</p>
 
-![Hierarchical architecture](docs/figures/architecture.png)
+- **pi1 planner:** consumes ball state and user targets, then produces a six-dimensional torso command: height, height rate, roll, pitch, roll rate, and pitch rate. Two variants were built: an analytic mirror law and a learned PPO planner.
+- **pi2 torso tracker:** a PPO policy with an MLP `[256, 128, 64]` that maps the torso command and robot state to 12 joint targets. Its committed 39D-to-12D ONNX export is used in the demo.
+- **Task stack:** Isaac Lab environments cover static ball balance, torso tracking, and the hierarchical ball-juggling task. The repository also includes ROS perception prototypes and deployment investigation.
 
-**π₂ — learned torso tracker.** A PPO policy mapping a 6D torso command (height,
-height rate, roll, pitch, roll rate, pitch rate) to 12 joint targets. Trained once in
-Isaac Lab, then frozen and reused across every task below. Observations are joint
-position and velocity, base state, last action, and the torso command; the actor is
-`[256, 128, 64]`.
+<p align="center">
+  <img src="docs/figures/isaaclab_demo.gif" width="720" alt="Four Go1 ball-juggling environments in Isaac Lab">
+</p>
 
-![Four Go1 environments in Isaac Lab](docs/figures/isaaclab_demo.gif)
+<p align="center"><em>Isaac Lab, cropped to the four-robot simulation viewport. This six-second GIF uses 31-37 seconds of the original recording.</em></p>
 
-*Six-second crop from 31-37 s of the Isaac Lab recording. The editor and interface
-areas are removed; this shows only the four-robot simulation viewport.*
+## What is demonstrated
 
-**π₁ — planner.** Two interchangeable implementations on top of the same frozen π₂:
+- **Reusable pi2 policy:** `sim_to_real/unitree_bringup/config/go1/pi2.onnx` is a committed 39D-to-12D torso-tracking export. The bounded MuJoCo smoke test below loads it and runs 20 policy steps.
+- **Tuned Isaac Lab to MuJoCo transfer:** the committed GIF above demonstrates the analytic mirror law plus pi2 in MuJoCo. The transfer is deliberately described as tuned: pi2 action magnitude is reduced to 20%, torso commands are clamped, and roll/pitch-rate commands are zeroed.
+- **Cross-simulator validation:** fixed-base joint comparisons, recorded golden cases, and a documented reindexing investigation separate policy-loading errors from physics mismatch. The golden actor cases reproduce to approximately `5e-6` according to the [debug record](docs/sim_to_sim_debug_log.md).
 
-- *Mirror law* — an analytic controller that reflects the ball's incoming velocity
-  about the paddle normal and adjusts mechanical energy to hit a target apex.
-  Physically interpretable, no training, and the basis for the demo above.
-- *Learned planner* — a PPO policy over ball and robot state, rewarding target apex
-  height and successful bounces. Implemented and trainable; see
-  [Limitations](#limitations) for its status.
+<p align="center">
+  <img src="docs/figures/sim_to_sim.png" width="760" alt="Isaac Lab and MuJoCo joint step-response comparison">
+</p>
 
-![Mirror-law planner](docs/figures/mirror_law_planner.png)
+<p align="center"><em>Fixed-base joint step response. The runtime mapping is derived from MJCF actuator names rather than a handwritten permutation.</em></p>
 
-Decoupling the layers means the planner can be swapped without retraining locomotion,
-and the analytic and learned planners are directly comparable on identical dynamics.
+The key transfer bug was a reversed joint reindex. Isaac Lab groups joints by type while the MJCF groups them by leg; treating the mapping as a gather made a default pose appear up to 2.5 rad wrong. The correction is the scatter operation `isaac[reindex] = mjcf` in [scripts/mujoco_utils.py](scripts/mujoco_utils.py).
 
-## Sim-to-sim transfer
+## What was built, but is not claimed as a verified result
 
-Getting π₂ to behave in MuJoCo was the bulk of the engineering. Full record in
-[`docs/sim_to_sim_debug_log.md`](docs/sim_to_sim_debug_log.md).
+- A learned pi1 PPO policy, reward structure, and training entrypoint are implemented, but no converged pi1 checkpoint, training log, or successful learned-pi1 video is committed.
+- ROS 1/ROS 2 perception prototypes perform HSV ball detection, depth back-projection, and Kalman-filtered state estimation. They are not connected to a trained visual policy.
+- The deployment investigation exported pi2 to ONNX and found that the stock Unitree controller accepts a 3D velocity command rather than the hierarchy's 6D torso command. No hardware rollout is claimed.
+- There is no verified domain-randomization result or balance-under-locomotion result in this repository.
 
-**Method.** Fixed-base joint step-response comparison isolates actuator and PD
-differences from policy differences. Golden-case tests pin the actor itself:
-recorded observation/action pairs must reproduce across both runtimes, which they do
-to ~5e-6, so any remaining divergence is attributable to physics rather than to
-deserialization.
+<p align="center">
+  <img src="docs/figures/mirror_law_planner.png" width="440" alt="Mirror-law planner diagram">
+</p>
 
-![Joint step response](docs/figures/sim_to_sim.png)
+<p align="center"><em>The mirror law uses ball state and desired apex energy to select a paddle orientation; it is the planner used in the committed MuJoCo demo.</em></p>
 
-**The reindex bug.** Isaac Lab and MJCF order the 12 joints differently. The mapping
-was applied as a gather where it needed to be a scatter — `isaac[reindex] = mjcf`,
-not `isaac = mjcf[reindex]`. The symptom was subtle: the robot stood, then drifted.
-A default-pose observation was off by up to 2.5 rad on individual joints, which the
-policy partially compensated for, which is exactly what made it hard to see.
-
-**What transfer required.** π₂ does not drop into MuJoCo unchanged. Action magnitude
-is scaled to 20%, torso commands are clamped, and roll/pitch-rate commands are zeroed.
-These compensate for actuator-model and contact differences between the two engines
-and are documented rather than tuned away.
-
-## Perception
-
-An egocentric ball tracker for hardware: HSV detection in OpenCV, depth
-back-projection to 3D position, and an extended Kalman filter for velocity. ROS 1 and
-ROS 2 nodes in [`testing_codes/perception/`](testing_codes/perception/).
-
-## Deployment
-
-π₂ exports to ONNX (39D observation, 12D action) and runs standalone. The blocking
-finding for hardware: the stock Unitree controller accepts a 3D velocity command, not
-this policy's 6D torso command, so deploying the hierarchy requires either a command
-adapter or a combined model. Notes in
-[`docs/sim_to_real_setup.md`](docs/sim_to_real_setup.md).
-
-## Run the MuJoCo demo
+## Reproduce the MuJoCo smoke test
 
 ```bash
-python3.11 -m venv .venv && . .venv/bin/activate
+python3.11 -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
 
-# actuator network, MIT-licensed, not vendored
 git clone https://github.com/Improbable-AI/walk-these-ways.git ../walk-these-ways
 export GO1_ACTUATOR_NET="$PWD/../walk-these-ways/resources/actuator_nets/unitree_go1.pt"
 
 python scripts/play_mujoco_mirror_paper.py --headless --max_steps 20
 ```
 
-Uses the committed `pi2.onnx`. Add `--video --video_length 500` to record.
+The actuator network is intentionally not vendored; it comes from the MIT-licensed [Walk These Ways](https://github.com/Improbable-AI/walk-these-ways) project. Isaac Lab training additionally needs Isaac Lab 2.3.2 / Isaac Sim 5.1, an NVIDIA GPU, and [`requirements-isaaclab.txt`](requirements-isaaclab.txt). Script-specific requirements are stated at the top of each file.
 
-Isaac Lab training (`scripts/rsl_rl/`) additionally requires Isaac Lab 2.3.2 /
-Isaac Sim 5.1, an NVIDIA GPU, and `rsl-rl-lib==3.0.1` — see
-[`requirements-isaaclab.txt`](requirements-isaaclab.txt). Individual scripts state
-their additional environment and checkpoint requirements at the top of each file.
+## Project context and team
 
-## Limitations
+Developed as the Agile Quadrupeds Group 164 capstone in the [UC Berkeley Master of Engineering](https://funginstitute.berkeley.edu/programs-centers/full-time-program/) program, Mechanical Engineering, with the Hybrid Robotics Lab and advisor Prof. Koushil Sreenath and Post Doc advisor Sangli Teng.
 
-- **The learned π₁ is not reproducible from this repository.** The task, rewards, and
-  training entrypoint are here; a converged checkpoint is not. Results shown use the
-  mirror-law planner.
-- **MuJoCo transfer is tuned**, per the compensations described above.
-- **π₂ tracking is imperfect** — height tracking stays within 5% error over roughly
-  the middle third of the commanded range and degrades at the extremes. Sweep and
-  trace plots are committed at [`videos/pi2/eval_pi2_sweep.png`](videos/pi2/eval_pi2_sweep.png)
-  and [`videos/pi2/pi2_tracking.png`](videos/pi2/pi2_tracking.png).
-- **No vision-based policy.** The perception stack runs standalone; it is not wired
-  into a trained policy's observations.
-- **No hardware rollout**, for the command-interface reason above.
-- **No domain randomization** beyond spawn and target variation.
+This is joint work by [Daniel Grant](https://github.com/DJRGVC), Jaime de Carlos de Churruca, and Siqi (Frank) Wang. Daniel led the original Isaac Lab environment and task definitions. Frank led the hierarchical pi1-pi2 controller, pi2 training/export, Isaac Lab-to-MuJoCo transfer and validation, perception prototype, and deployment investigation. Jaime contributed to the project’s system design and mirror-law-planner work. The original repository is [QuadruJuggle](https://github.com/DJRGVC/QuadruJuggle).
 
-## Report
+For the complete project record, see the [capstone report](<docs/capstone_report.pdf>), [presentation deck](<docs/presentation_deck.pdf>), and [sim-to-sim debugging record](docs/sim_to_sim_debug_log.md). The earlier [February 2026 status report](QuadruJuggle_Research_Overview.pdf) is retained for timeline context but is partly superseded by later work.
 
-[`QuadruJuggle_Research_Overview.pdf`](QuadruJuggle_Research_Overview.pdf) — February
-2026 status report, partly superseded by the transfer and deployment work above.
-
-## Attribution
-
-Joint project with [Daniel Grant](https://github.com/DJRGVC) and Jaime de Carlos,
-Hybrid Robotics Lab, UC Berkeley, advised by Prof. Koushil Sreenath. Original
-repository: [QuadruJuggle](https://github.com/DJRGVC/QuadruJuggle).
-
-Daniel wrote most of the Isaac Lab task and environment definitions. My work: the
-π₁–π₂ hierarchical controller, training and exporting the π₂ torso-tracking policy,
-the Isaac Lab → MuJoCo transfer and cross-simulator validation, the perception
-prototype, and the deployment investigation.
+Related technical context: Poggensee et al., *Ball Juggling on the Bipedal Robot Cassie* (ECC 2020); Schulman et al., *Proximal Policy Optimization Algorithms* (2017); and Margolis & Agrawal, *Walk These Ways* (CoRL 2023).
