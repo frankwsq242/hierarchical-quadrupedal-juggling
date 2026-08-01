@@ -66,7 +66,33 @@ export GO1_ACTUATOR_NET="$PWD/../walk-these-ways/resources/actuator_nets/unitree
 python scripts/play_mujoco_mirror_paper.py --headless --max_steps 20
 ```
 
-The actuator network is intentionally not vendored; it comes from the MIT-licensed [Walk These Ways](https://github.com/Improbable-AI/walk-these-ways) project. Isaac Lab training additionally needs Isaac Lab 2.3.2 / Isaac Sim 5.1, an NVIDIA GPU, and [`requirements-isaaclab.txt`](requirements-isaaclab.txt). Script-specific requirements are stated at the top of each file.
+The actuator network is intentionally not vendored; it comes from the MIT-licensed [Walk These Ways](https://github.com/Improbable-AI/walk-these-ways) project.
+
+## Isaac Lab training and play
+
+This path requires an official Isaac Lab 2.3.2 / Isaac Sim 5.1.0 Python 3.11 installation and an NVIDIA GPU. From that environment, install the extension and training requirements:
+
+```bash
+pip install -e source/go1_ball_balance
+pip install -r requirements-isaaclab.txt
+```
+
+The committed `checkpoints/pi2_torso_tracking_best.pt` supports standalone Pi2 and mirror-law playback. Train a replacement Pi2 checkpoint, then use it for the hierarchical Pi1 stage:
+
+```bash
+python scripts/rsl_rl/train_torso_tracking.py --headless --num_envs 4096
+python scripts/play_pi2.py --num_envs 4 --max_steps 1000
+python scripts/play_mirror_law.py --num_envs 4
+
+python scripts/rsl_rl/train_pi1.py \
+  --pi2_checkpoint logs/rsl_rl/go1_torso_tracking/<TIMESTAMP>/model_best.pt \
+  --headless --num_envs 1024
+python scripts/play_pi1.py \
+  --pi1_checkpoint logs/rsl_rl/go1_ball_juggle_hier/<TIMESTAMP>/model_best.pt \
+  --num_envs 4
+```
+
+The Pi1 training and play commands are included for reproducibility, not as a claim of a converged Pi1 result.
 
 ## Project context and team
 
