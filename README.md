@@ -40,7 +40,7 @@ Juggling is a compact test of legged manipulation: the robot must manage contact
 
 The key transfer bug was a reversed joint reindex. Isaac Lab groups joints by type while the MJCF groups them by leg; treating the mapping as a gather made a default pose appear up to 2.5 rad wrong. The correction is the scatter operation `isaac[reindex] = mjcf` in [scripts/mujoco_utils.py](scripts/mujoco_utils.py).
 
-## What was built, but is not claimed as a verified result
+## Limitations
 
 - A learned pi1 PPO policy, reward structure, and training entrypoint are implemented, but no converged pi1 checkpoint, training log, or successful learned-pi1 video is committed.
 - ROS 1/ROS 2 perception prototypes perform HSV ball detection, depth back-projection, and Kalman-filtered state estimation. They are not connected to a trained visual policy.
